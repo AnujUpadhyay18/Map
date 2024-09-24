@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Leaflet Map with Routing and Controls</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.7.1/dist/leaflet.css" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet-routing-machine@latest/dist/leaflet-routing-machine.css" />
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+
+    .container {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      height: 100vh;
+      background-color: #f0f0f5;
+      padding: 20px;
+    }
+
+    /* Styling for the input fields and button */
+    .address-input {
+      margin-bottom: 20px;
+      text-align: center;
+    }
+
+    .address-input input {
+      padding: 10px;
+      margin: 5px;
+      border-radius: 5px;
+      border: 1px solid #ccc;
+      width: 200px;
+      font-size: 16px;
+      transition: border-color 0.3s;
+    }
+
+    .address-input input:focus {
+      outline: none;
+      border-color: #007bff;
+    }
+
+    .address-input button {
+      padding: 10px 20px;
+      background-color: #007bff;
+      color: white;
+      border: none;
+      border-radius: 5px;
+      font-size: 16px;
+      cursor: pointer;
+      transition: background-color 0.3s, transform 0.2s;
+    }
+
+    .address-input button:hover {
+      background-color: #0056b3;
+      transform: scale(1.05);
+    }
+
+
+    #map {
+      width: 100%;
+      height: 500px;
+      border-radius: 10px;
+      box-shadow: 0px 4px 8px rgba(0, 0, 0, 0.1);
+    }
+
+    /* Responsive adjustments */
+    @media (max-width: 600px) {
+      .address-input input {
+        width: 90%;
+      }
+
+      #map {
+        height: 300px;
+      }
+    }
+
+    #popup {
+      border: 2px solid black;
+      z-index: 15;
+      border-radius: 10%;
+      padding: 10px;
+    }
+  </style>
+
+</head>
+
+<body>
+  <div class="container">
+    <div class="address-input">
+      <input type="text" placeholder="Source Address" id="lati" />
+      <input type="text" placeholder="Destination Address" id="langi" />
+      <button onclick="useUserInput()" id="btn">Start</button>
+    </div>
+
+    <div id="map"></div>
+    <div id="popup">
+      <label for="range">Increase Speed</label>
+      <input type="range" name="" id="range" value="200" min="10" max="2000">
+    </div>
+  </div>
+
+  <script src="https://unpkg.com/leaflet@1.7.1/dist/leaflet.js"></script>
+  <script src="https://unpkg.com/leaflet-routing-machine@latest/dist/leaflet-routing-machine.js"></script>
+
+  <script>
+    // Initialize the map
+    var map = L.map('map').setView([51.505, -0.09], 13);
+
+    // Add OpenStreetMap tile layer
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '© OpenStreetMap contributors'
+    }).addTo(map);
+
+    // Add a marker at the starting point
+    var marker = L.marker([51.505, -0.09]).addTo(map);
+
+    // Variable to stop the fetch-based system
+    let stopFetch = false;
+
+    // Function to move the marker
+    let coordinates = [];
+    let index = 0;
+
+    function moveMarker() {
+      let range = document.getElementById('range').value;
+      let reversedSpeed = document.getElementById('range').max - (range - document.getElementById('range').min);
+
+      if (index < coordinates.length) {
+        marker.setLatLng([coordinates[index].lat, coordinates[index].lng]);
+        index++;
+        setTimeout(moveMarker, reversedSpeed);
+      }
+    }
+
+    async function abc() {
+      if (stopFetch) return;
+
+      let data = await fetch('https://map-1-a2bl.onrender.com/api/location');
+      let res = await data.json();
+
+      const firstCoordinate = res[0]; // First data as source
+      const lastCoordinate = res[res.length - 1]; // Last data as destination
+
+      const control = L.Routing.control({
+        waypoints: [
+          L.latLng(firstCoordinate.latitude, firstCoordinate.longitude),
+          L.latLng(lastCoordinate.latitude, lastCoordinate.longitude)
+        ],
+        routeWhileDragging: true
+      }).addTo(map);
+
+      control.on('routesfound', function (e) {
+        const routes = e.routes;
+        coordinates = routes[0].coordinates;
+        moveMarker(); // Start moving marker along the route
+      });
+    }
+
+    // Start the fetch system
+    abc();
+
+    // Define the region function for user input
+    async function region() {
+      const source = document.querySelector('#lati').value;
+      const dest = document.querySelector('#langi').value;
+
+      const sourceCoordinates = await getCoordinates(source);
+      const destCoordinates = await getCoordinates(dest);
+
+      if (sourceCoordinates && destCoordinates) {
+        const control = L.Routing.control({
+          waypoints: [
+            L.latLng(sourceCoordinates.lat, sourceCoordinates.lon),
+            L.latLng(destCoordinates.lat, destCoordinates.lon)
+          ],
+          routeWhileDragging: true
+        }).addTo(map);
+
+        control.on('routesfound', function (e) {
+          const routes = e.routes;
+          const summary = routes[0].summary;
+          coordinates = routes[0].coordinates;
+
+          alert('Distance: ' + (summary.totalDistance / 1000).toFixed(2) + ' km, Time: ' + (summary.totalTime / 60).toFixed(0) + ' minutes');
+
+          moveMarker(); // Start moving the marker along the new route
+        });
+      }
+    }
+
+    // Stop fetch system and use user input
+    function useUserInput() {
+      stopFetch = true; // Stop the fetch-based system
+      region(); // Use the region function for user input
+    }
+
+    // Geocode function
+    async function getCoordinates(address) {
+      const url = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(address)}`;
+      try {
+        const response = await fetch(url);
+        const data = await response.json();
+        if (data.length > 0) {
+          const { lat, lon } = data[0];
+          return { lat: parseFloat(lat), lon: parseFloat(lon) };
+        } else {
+          alert('No results found for the given address.');
+          return null;
+        }
+      } catch (error) {
+        console.error('Error fetching coordinates:', error);
+      }
+    }
+
+    // Function to get the location name from latitude and longitude
+    async function getLocationName(lat, lng, popup) {
+      const url = `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=18&addressdetails=1`;
+
+      await fetch(url)
+        .then((response) => response.json())
+        .then((data) => {
+          const locationName = data.display_name || 'Unknown location';
+          // Set the popup content to the location name
+          popup.setContent(`Location: ${locationName}`).openOn(map);
+        })
+        .catch((error) => {
+          console.error('Error:', error);
+          popup.setContent('Unable to get location name').openOn(map);
+        });
+    }
+
+
+    map.on('click', function (e) {
+      const { lat, lng } = e.latlng;
+
+      // Create a popup at the clicked location
+      const popup = L.popup()
+        .setLatLng([lat, lng])
+        .setContent('Loading location...')
+        .openOn(map);
+
+      // Call reverse geocoding to get the location name
+      getLocationName(lat, lng, popup);
+    });
+
+
+
+  </script>
+
+</body>
+
+</html>
