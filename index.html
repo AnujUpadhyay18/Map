@@ -14,7 +14,6 @@
       box-sizing: border-box;
     }
 
-
     .container {
       display: flex;
       flex-direction: column;
@@ -62,7 +61,6 @@
       transform: scale(1.05);
     }
 
-
     #map {
       width: 100%;
       height: 500px;
@@ -87,8 +85,44 @@
       border-radius: 10%;
       padding: 10px;
     }
-  </style>
 
+    /* Enhanced loading animation */
+    #loading {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      z-index: 1000;
+    }
+
+    .spinner {
+      width: 50px;
+      height: 50px;
+      border: 6px solid #f3f3f3;
+      border-top: 6px solid #007bff;
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+    }
+
+    @keyframes spin {
+      0% {
+        transform: rotate(0deg);
+      }
+      100% {
+        transform: rotate(360deg);
+      }
+    }
+
+    .loading-text {
+      margin-left: 20px;
+      font-size: 18px;
+      font-weight: bold;
+      color: #007bff;
+    }
+  </style>
 </head>
 
 <body>
@@ -98,11 +132,14 @@
       <input type="text" placeholder="Destination Address" id="langi" />
       <button onclick="useUserInput()" id="btn">Start</button>
     </div>
-
+    <div id="loading">
+      <div class="spinner"></div>
+      <div class="loading-text">Loading...</div>
+    </div>
     <div id="map"></div>
     <div id="popup">
       <label for="range">Increase Speed</label>
-      <input type="range" name="" id="range" value="200" min="10" max="2000">
+      <input type="range" name="" id="range" value="100" min="10" max="150">
     </div>
   </div>
 
@@ -118,8 +155,14 @@
       attribution: '© OpenStreetMap contributors'
     }).addTo(map);
 
-    // Add a marker at the starting point
-    var marker = L.marker([51.505, -0.09]).addTo(map);
+    var carIcon = L.icon({
+      iconUrl: '/car.svg',
+      iconSize: [50, 50], // Size of the icon
+      
+    });
+  
+    // Add a marker with the custom icon at the starting point
+    var marker = L.marker([51.505, -0.09], { icon: carIcon }).addTo(map);
 
     // Variable to stop the fetch-based system
     let stopFetch = false;
@@ -131,7 +174,6 @@
     function moveMarker() {
       let range = document.getElementById('range').value;
       let reversedSpeed = document.getElementById('range').max - (range - document.getElementById('range').min);
-
       if (index < coordinates.length) {
         marker.setLatLng([coordinates[index].lat, coordinates[index].lng]);
         index++;
@@ -141,10 +183,13 @@
 
     async function abc() {
       if (stopFetch) return;
+      let loading = document.getElementById('loading');
+      
+        let data = await fetch('https://map-1-a2bl.onrender.com/api/location');
+        let res = await data.json();
 
-      let data = await fetch('https://map-1-a2bl.onrender.com/api/location');
-      let res = await data.json();
-
+     
+      loading.style.display = 'none';
       const firstCoordinate = res[0]; // First data as source
       const lastCoordinate = res[res.length - 1]; // Last data as destination
 
@@ -227,7 +272,6 @@
         .then((response) => response.json())
         .then((data) => {
           const locationName = data.display_name || 'Unknown location';
-          // Set the popup content to the location name
           popup.setContent(`Location: ${locationName}`).openOn(map);
         })
         .catch((error) => {
@@ -236,8 +280,8 @@
         });
     }
 
+    map.on('click', function (e){ 
 
-    map.on('click', function (e) {
       const { lat, lng } = e.latlng;
 
       // Create a popup at the clicked location
